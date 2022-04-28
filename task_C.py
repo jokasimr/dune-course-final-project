@@ -20,7 +20,7 @@ except Exception:
     found_pygmsh = False
     print("Could not import pygmsh")
 
-if found_pygmsh and rank == 0:
+if found_pygmsh and comm.rank == 0:
     # Grid size function
     def size(dim, tag, x, y, z, lc):
         d = ((x - c)**2 + (y - c)**2)**0.5
@@ -47,7 +47,7 @@ if found_pygmsh and rank == 0:
             json_domain = {k: list(list(map(float, e)) for e in v) for k, v in domain.items()}
             json.dump(json_domain, f)
 
-elif rank == 0:
+elif comm.rank == 0:
     with open("domain.json") as f:
         domain = json.load(f)
 
