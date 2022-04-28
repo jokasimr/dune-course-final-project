@@ -1,3 +1,5 @@
+import json
+import numpy as np
 from dune.grid import cartesianDomain
 from dune.fem.function import integrate, uflFunction
 from dune.ufl import Constant
@@ -6,39 +8,58 @@ from ufl import as_vector, sqrt, dot, curl, conditional
 
 from setup import setup
 
-import meshio
-import pygmsh
-
-
 # Define domain
 L = 2.2; H = 0.41
 c = 0.2; r = 0.05
 
-# Grid size function
-def size(dim, tag, x, y, z, lc):
-    d = ((x - c)**2 + (y - c)**2)**0.5
-    if d > 3 * r:
-        if x < 0.5:
-            if 0.4 > x > 0.2:
-                return 0.03
-            return 0.05
-        return 0.06
-    return abs(d - r)/2 + 1.5e-3
 
-with pygmsh.occ.Geometry() as geom:
-    rectangle = geom.add_rectangle([0, 0, 0], L, H)
-    obstacle = geom.add_ball([c, c, 0], r)
-    geom.boolean_difference(rectangle, obstacle)
-    geom.set_mesh_size_callback(size)
-    mesh = geom.generate_mesh()
+try:
+    import pygmsh
+    found_pygmsh = True
 
-    points, cells = mesh.points, mesh.cells_dict
-    domain = {"vertices": points[:,:2].astype(float),
-              "simplices": cells["triangle"].astype(int)}
+except Exception:
+    found_pygmsh = False
+    print("Could not import pygmsh")
+
+if found_pygmsh:
+    # Grid size function
+    def size(dim, tag, x, y, z, lc):
+        d = ((x - c)**2 + (y - c)**2)**0.5
+        if d > 3 * r:
+            if x < 0.5:
+                if 0.4 > x > 0.2:
+                    return 0.03
+                return 0.05
+            return 0.06
+        return abs(d - r)/2 + 1.5e-3
+    
+    with pygmsh.occ.Geometry() as geom:
+        rectangle = geom.add_rectangle([0, 0, 0], L, H)
+        obstacle = geom.add_ball([c, c, 0], r)
+        geom.boolean_difference(rectangle, obstacle)
+        geom.set_mesh_size_callback(size)
+        mesh = geom.generate_mesh()
+    
+        points, cells = mesh.points, mesh.cells_dict
+        domain = {"vertices": points[:,:2].astype(float),
+                  "simplices": cells["triangle"].astype(int)}
+
+        with open("domain.json", "w") as f:
+            json_domain = {k: list(list(map(float, e)) for e in v) for k, v in domain.items()}
+            json.dump(json_domain, f)
+
+else:
+    with open("domain.json") as f:
+        domain = json.load(f)
+
+    domain = {k: np.array(v) for k, v in domain.items()}
+    domain["simplices"] = domain["simplices"].astype(int)
+
+
+
     
 problem = setup(domain)
 view, x = next(problem)
-view.plot()
 
 # Define parameters
 μ = Constant(1e-3, name="mu")
