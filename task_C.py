@@ -47,7 +47,7 @@ if found_pygmsh and rank == 0:
             json_domain = {k: list(list(map(float, e)) for e in v) for k, v in domain.items()}
             json.dump(json_domain, f)
 
-else if rank == 0:
+elif rank == 0:
     with open("domain.json") as f:
         domain = json.load(f)
 
