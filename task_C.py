@@ -12,7 +12,6 @@ from setup import setup
 L = 2.2; H = 0.41
 c = 0.2; r = 0.05
 
-
 try:
     import pygmsh
     found_pygmsh = True
@@ -21,7 +20,7 @@ except Exception:
     found_pygmsh = False
     print("Could not import pygmsh")
 
-if found_pygmsh:
+if found_pygmsh and rank == 0:
     # Grid size function
     def size(dim, tag, x, y, z, lc):
         d = ((x - c)**2 + (y - c)**2)**0.5
@@ -48,14 +47,15 @@ if found_pygmsh:
             json_domain = {k: list(list(map(float, e)) for e in v) for k, v in domain.items()}
             json.dump(json_domain, f)
 
-else:
+else if rank == 0:
     with open("domain.json") as f:
         domain = json.load(f)
 
     domain = {k: np.array(v) for k, v in domain.items()}
     domain["simplices"] = domain["simplices"].astype(int)
 
-
+else:
+   domain = {"vertices": [], "simplices": []}
 
     
 problem = setup(domain)
