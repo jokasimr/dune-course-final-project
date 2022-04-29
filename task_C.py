@@ -60,6 +60,7 @@ else:
     
 problem = setup(domain)
 view, x = next(problem)
+view.hierarchicalGrid.globalRefine(1)
 
 # Define parameters
 μ = Constant(1e-3, name="mu")
@@ -69,7 +70,7 @@ f = Constant([0, 0], name="source")
 print("Reynolds number:", 6 * 0.2 * (H - 0.2) / H**2 * 2*r / μ.value)
 
 T = 5
-dt = Constant(T / 1e4, name="dt")
+dt = Constant(T / 1e5, name="dt")
 t = Constant(0, name="time")
 
 # Boundary conditions
