@@ -1,3 +1,4 @@
+import time
 from itertools import islice
 import numpy as np
 from dune.grid import cartesianDomain
@@ -25,7 +26,7 @@ def setup(domain, grid_type=aluConformGrid):
     dim = view.dimension
 
     # Spaces
-    storage = "numpy"
+    storage = "petsc"
     space_velocity = lagrange(view, order=2, dimRange=dim, storage=storage)
     x = SpatialCoordinate(space_velocity)
     n = FacetNormal(space_velocity)
@@ -85,14 +86,12 @@ def setup(domain, grid_type=aluConformGrid):
     shared_solver_parameters = {
         "newton.tolerance": 1e-5,
         "newton.linear.tolerance": 1e-7,
-        "newton.linear.preconditioning.method": "ssor",
-        #"newton.verbose": True,
-        #"newton.linear.verbose": True
+        "newton.verbose": True,
+        #"newton.linear.verbose": True,
     }
     
     tentative_velocity_problem = galerkin(
         [tentative_velocity_form(u_old, p_old), *u_bc],
-        solver="cg",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -102,7 +101,6 @@ def setup(domain, grid_type=aluConformGrid):
     )
     pressure_problem = galerkin(
         [pressure_update_form(p_old, u_tentative), *p_bc],
-        solver="cg",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -111,7 +109,6 @@ def setup(domain, grid_type=aluConformGrid):
     )
     velocity_problem = galerkin(
         [velocity_update_form(u_tentative, p_new, p_old), *u_bc],
-        solver="cg",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "sor",
@@ -120,9 +117,25 @@ def setup(domain, grid_type=aluConformGrid):
     ) 
     
     def step():
+        if comm.rank == 0:
+            print("tentative solve")
+        start = time.time()
         tentative_velocity_problem.solve(target=u_tentative)
+        maxtime = comm.max(time.time() - start)
+        if comm.rank == 0:
+            print("tentative solve", maxtime)
+            print("pressure solve")
+        start = time.time()
         pressure_problem.solve(target=p_new)
+        maxtime = comm.max(time.time() - start)
+        if comm.rank == 0:
+            print("pressure solve", maxtime)
+            print("velocity solve")
+        start = time.time()
         velocity_problem.solve(target=u_new)
+        maxtime = comm.max(time.time() - start)
+        if comm.rank == 0:
+            print("velocity solve", maxtime)
         u_old.assign(u_new)
         p_old.assign(p_new)
         t.value += dt.value
