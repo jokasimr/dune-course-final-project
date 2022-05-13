@@ -84,15 +84,19 @@ def setup(domain, grid_type=aluConformGrid):
     # Solvers
     shared_solver_parameters = {
         "newton.tolerance": 1e-5,
-        "newton.linear.tolerance": 1e-7,
+        #"newton.linear.tolerance": 1e-7,
+        "newton.linear.tolerance.strategy": "eisenstatwalker",
+        "newton.linear.errormeasure": "residualreduction",
         "newton.linear.preconditioning.method": "ssor",
         #"newton.verbose": True,
         #"newton.linear.verbose": True
     }
+
+    linear_solver = "cg"
     
     tentative_velocity_problem = galerkin(
         [tentative_velocity_form(u_old, p_old), *u_bc],
-        solver="cg",
+        solver=linear_solver,
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -102,7 +106,7 @@ def setup(domain, grid_type=aluConformGrid):
     )
     pressure_problem = galerkin(
         [pressure_update_form(p_old, u_tentative), *p_bc],
-        solver="cg",
+        solver=linear_solver,
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -111,7 +115,7 @@ def setup(domain, grid_type=aluConformGrid):
     )
     velocity_problem = galerkin(
         [velocity_update_form(u_tentative, p_new, p_old), *u_bc],
-        solver="cg",
+        solver=linear_solver,
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "sor",
