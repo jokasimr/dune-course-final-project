@@ -1,3 +1,13 @@
+import resource
+previous_memory_consumption = None
+def print_memory_usage(when):
+    global previous_memory_consumption
+    memory = comm.max(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    diff = memory - previous_memory_consumption if previous_memory_consumption else None
+    if comm.rank == 0:
+        print("peak memory usage: ", when, ": ", memory, " kb", f"(diff {diff} kb)")
+    previous_memory_consumption = memory
+    
 import time
 from itertools import islice
 import numpy as np
@@ -85,13 +95,17 @@ def setup(domain, grid_type=aluConformGrid):
     # Solvers
     shared_solver_parameters = {
         "newton.tolerance": 1e-5,
-        "newton.linear.tolerance": 1e-7,
+        "newton.linear.tolerance": 1e-8,
         "newton.verbose": True,
+        #"newton.linear.preconditioning.method": "ssor",
         #"newton.linear.verbose": True,
+        #"newton.linear.preconditioning.method": "ssor",
+        #"newton.linear.preconditioning.hypre.method": "boomeramg",
     }
     
     tentative_velocity_problem = galerkin(
         [tentative_velocity_form(u_old, p_old), *u_bc],
+        solver="gmres",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -101,6 +115,7 @@ def setup(domain, grid_type=aluConformGrid):
     )
     pressure_problem = galerkin(
         [pressure_update_form(p_old, u_tentative), *p_bc],
+        solver="cg",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -109,6 +124,7 @@ def setup(domain, grid_type=aluConformGrid):
     )
     velocity_problem = galerkin(
         [velocity_update_form(u_tentative, p_new, p_old), *u_bc],
+        solver="gmres",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "sor",
@@ -117,27 +133,32 @@ def setup(domain, grid_type=aluConformGrid):
     ) 
     
     def step():
+        print_memory_usage("before step")
         if comm.rank == 0:
             print("tentative solve")
         start = time.time()
         tentative_velocity_problem.solve(target=u_tentative)
+        print_memory_usage("after tentative")
         maxtime = comm.max(time.time() - start)
         if comm.rank == 0:
             print("tentative solve", maxtime)
             print("pressure solve")
         start = time.time()
         pressure_problem.solve(target=p_new)
+        print_memory_usage("after pressure")
         maxtime = comm.max(time.time() - start)
         if comm.rank == 0:
             print("pressure solve", maxtime)
             print("velocity solve")
         start = time.time()
         velocity_problem.solve(target=u_new)
+        print_memory_usage("after velocity")
         maxtime = comm.max(time.time() - start)
         if comm.rank == 0:
             print("velocity solve", maxtime)
         u_old.assign(u_new)
         p_old.assign(p_new)
+        print_memory_usage("after assignment")
         t.value += dt.value
         
-    yield (u_old, p_old, step)
+    yield u_old, p_old, u_tentative, u_new, p_new, step
