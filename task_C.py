@@ -1,10 +1,15 @@
 import json
 import numpy as np
+import time
+
+PROGRAM_START_TIME = time.time()
+
 from dune.grid import cartesianDomain
 from dune.fem.function import integrate, uflFunction
 from dune.ufl import Constant
 from dune.common import comm
 from ufl import as_vector, sqrt, dot, curl, conditional
+import dune.fem as fem
 
 from setup import setup
 
@@ -25,11 +30,11 @@ if found_pygmsh and comm.rank == 0:
     def size(dim, tag, x, y, z, lc):
         d = ((x - c)**2 + (y - c)**2)**0.5
         if d > 3 * r:
-            if x < 0.5:
+            if x < 0.7:
                 if 0.4 > x > 0.2:
-                    return 0.03
-                return 0.05
-            return 0.06
+                    return 0.02
+                return 0.03
+            return 0.05
         return abs(d - r)/2 + 1.5e-3
     
     with pygmsh.occ.Geometry() as geom:
@@ -60,6 +65,7 @@ else:
     
 problem = setup(domain)
 view, x = next(problem)
+view.hierarchicalGrid.globalRefine(1)
 
 # Define parameters
 μ = Constant(1e-3, name="mu")
@@ -69,7 +75,7 @@ f = Constant([0, 0], name="source")
 print("Reynolds number:", 6 * 0.2 * (H - 0.2) / H**2 * 2*r / μ.value)
 
 T = 5
-dt = Constant(T / 1e4, name="dt")
+dt = Constant(5e-5, name="dt")
 t = Constant(0, name="time")
 
 # Boundary conditions
@@ -85,7 +91,7 @@ bc_velocity = {top: [0, 0],
                left: [6 * x[1] * (H - x[1]) / H**2, 0]}
 bc_pressure = {right: 0}
 
-u, p, step = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f))
+u, p, *funs, step = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f))
 
 # Initial condition
 u.interpolate([0, 0])
@@ -101,21 +107,24 @@ indicator = conditional(
 def adapt():
     fem.markNeighbors(indicator, refineTolerance=50, coarsenTolerance=20, minLevel=0, maxLevel=3)
     fem.adapt([u, p])
-    fem.loadBalance([u, p])
+    fem.loadBalance([u, p, *funs])
     
 indicator_function = uflFunction(view, ufl=indicator, name="refinement_indicator", order=2)
 
 # Run
-savetime = 0.1
-write_solution = view.sequencedVTK("solution", celldata=[u, p, indicator_function], pointdata=[u, p])
+savetime = 0.01
+write_solution = view.sequencedVTK("solution", celldata=[indicator_function], pointdata=[u, p], subsampling=3)
 use_adaptivity = False
+write_vtu_files = True
 
 while t.value < T:
     if t.value // savetime > (t.value - dt.value) // savetime:
         if comm.rank == 0:
+            print("runtime: ", (time.time() - PROGRAM_START_TIME) / 60, " minutes")
             print(" Time: ", t.value, "/", T)
             print("u size", u.size)
-        write_solution()
+        if write_vtu_files:
+            write_solution()
         
     step()
     if use_adaptivity:
