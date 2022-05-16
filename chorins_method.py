@@ -4,7 +4,7 @@ def print_memory_usage(when):
     global previous_memory_consumption
     memory = comm.max(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
     diff = memory - previous_memory_consumption if previous_memory_consumption else None
-    if comm.rank == 0:
+    if comm.rank == 0 and LOG:
         print("peak memory usage: ", when, ": ", memory, " kb", f"(diff {diff} kb)")
     previous_memory_consumption = memory
     
@@ -36,7 +36,7 @@ def setup(domain, grid_type=aluConformGrid):
     dim = view.dimension
 
     # Spaces
-    storage = "petsc"
+    storage = "numpy"
     space_velocity = lagrange(view, order=2, dimRange=dim, storage=storage)
     x = SpatialCoordinate(space_velocity)
     n = FacetNormal(space_velocity)
@@ -100,6 +100,7 @@ def setup(domain, grid_type=aluConformGrid):
         "newton.linear.errormeasure": "residualreduction",
         "newton.linear.preconditioning.method": "ssor",
         #"newton.verbose": True,
+        #"newton.linear.verbose": True,
     }
 
     tentative_velocity_problem = galerkin(
@@ -131,33 +132,19 @@ def setup(domain, grid_type=aluConformGrid):
         }
     ) 
     
-    def step():
-        print_memory_usage("before step")
-        if comm.rank == 0:
-            print("tentative solve")
-        start = time.time()
-        tentative_velocity_problem.solve(target=u_tentative)
-        print_memory_usage("after tentative")
-        maxtime = comm.max(time.time() - start)
-        if comm.rank == 0:
-            print("tentative solve", maxtime)
-            print("pressure solve")
-        start = time.time()
-        pressure_problem.solve(target=p_new)
-        print_memory_usage("after pressure")
-        maxtime = comm.max(time.time() - start)
-        if comm.rank == 0:
-            print("pressure solve", maxtime)
-            print("velocity solve")
-        start = time.time()
-        velocity_problem.solve(target=u_new)
-        print_memory_usage("after velocity")
-        maxtime = comm.max(time.time() - start)
-        if comm.rank == 0:
-            print("velocity solve", maxtime)
+    def step(info_collection):
+        info_collection.solve_event("tentative_velocity")(
+            tentative_velocity_problem.solve(target=u_tentative)
+        )
+        info_collection.solve_event("pressure")(
+            pressure_problem.solve(target=p_new)
+        )
+        info_collection.solve_event("velocity")(
+            velocity_problem.solve(target=u_new)
+        )
+        #print_memory_usage("after solve")
         u_old.assign(u_new)
         p_old.assign(p_new)
-        print_memory_usage("after assignment")
         t.value += dt.value
         
-    yield u_old, p_old, u_tentative, u_new, p_new, step
+    yield u_new, p_new, step

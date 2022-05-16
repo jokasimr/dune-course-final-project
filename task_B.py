@@ -3,7 +3,7 @@ from dune.fem.function import integrate
 from dune.ufl import Constant
 from ufl import as_vector, sqrt, dot
 
-from setup import setup
+from chorins_method import setup
 
 import meshio
 import pygmsh
