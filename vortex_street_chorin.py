@@ -2,16 +2,15 @@ import json
 import numpy as np
 import time
 
-PROGRAM_START_TIME = time.time()
-
 from dune.grid import cartesianDomain
 from dune.fem.function import integrate, uflFunction
 from dune.ufl import Constant
 from dune.common import comm
-from ufl import as_vector, sqrt, dot, curl, conditional
+from ufl import as_vector, sqrt, dot, curl, conditional, div
 import dune.fem as fem
 
-from setup import setup
+from info import RunInformationCollector
+from chorins_method import setup
 
 # Define domain
 L = 2.2; H = 0.41
@@ -60,7 +59,7 @@ elif comm.rank == 0:
     domain["simplices"] = domain["simplices"].astype(int)
 
 else:
-   domain = {"vertices": [], "simplices": []}
+    domain = {"vertices": [], "simplices": []}
 
     
 problem = setup(domain)
@@ -110,26 +109,30 @@ def adapt():
     fem.loadBalance([u, p, *funs])
     
 indicator_function = uflFunction(view, ufl=indicator, name="refinement_indicator", order=2)
+divergence_function = uflFunction(view, ufl=sqrt(div(u)**2), name="divergence", order=2)
 
 # Run
 savetime = 0.01
-write_solution = view.sequencedVTK("solution", celldata=[indicator_function], pointdata=[u, p], subsampling=3)
+write_solution = view.sequencedVTK(
+    "solution",
+    celldata=[indicator_function, divergence_function],
+    pointdata=[u, p],
+    subsampling=2
+)
 use_adaptivity = False
-write_vtu_files = True
+info = RunInformationCollector("vortex_street_chorin", dict(p=p, u=u))
+info.step_event(t.value)
 
 while t.value < T:
     if t.value // savetime > (t.value - dt.value) // savetime:
-        if comm.rank == 0:
-            print("runtime: ", (time.time() - PROGRAM_START_TIME) / 60, " minutes")
-            print(" Time: ", t.value, "/", T)
-            print("u size", u.size)
-        if write_vtu_files:
-            write_solution()
+        write_solution()
+        info.save()
         
-    step()
+    step(info)
+    info.step_event(t.value)
     if use_adaptivity:
         adapt()
+        info.adaptivity_event()
 
-if comm.rank == 0:
-    print("Finished: Time: ", t.value, "/", T)
 write_solution()
+info.save()
