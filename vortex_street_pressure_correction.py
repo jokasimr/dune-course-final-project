@@ -91,13 +91,13 @@ bc_velocity = {top: [0, 0],
                left: [6 * x[1] * (H - x[1]) / H**2, 0]}
 bc_pressure = {right: 0}
 
-u0, p0, u, p, step = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f))
+u0, u, p, phi, step, adapt_vectors = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f))
 
 # Initial condition
 u0.interpolate([0, 0])
-p0.interpolate(0)
 u.interpolate([0, 0])
 p.interpolate(0)
+phi.interpolate(0)
 
 # Adaptivity
 ignore_factor = Constant(1.2, name="ignore_factor")
@@ -108,8 +108,7 @@ indicator = conditional(
 )
 def adapt():
     fem.markNeighbors(indicator, refineTolerance=50, coarsenTolerance=20, minLevel=0, maxLevel=3)
-    fem.adapt([u, p])
-    fem.loadBalance([u, p])
+    adapt_vectors()
     
 indicator_function = uflFunction(view, ufl=indicator, name="refinement_indicator", order=2)
 divergence_function = uflFunction(view, ufl=sqrt(div(u)**2), name="divergence", order=2)
@@ -123,15 +122,18 @@ write_solution = view.sequencedVTK(
     subsampling=2
 )
 use_adaptivity = False
-info = RunInformationCollector("vortex_street_pressure_correction")
+info = RunInformationCollector("vortex_street_pressure_correction", dict(p=p, u=u))
+info.step_event(t.value)
 
 while t.value < T:
     if t.value // savetime > (t.value - dt.value) // savetime:
         write_solution()
         info.save()
+        if comm.rank == 0:
+            print("JSON ", json.dumps(info.events[-1]))
         
     step(info)
-    info.step_event()
+    info.step_event(t.value)
     if use_adaptivity:
         adapt()
         info.adaptivity_event()
