@@ -16,18 +16,18 @@ class RunInformationCollector:
     def adaptivity_event(self):
         vector_sizes = {name: dict(size=comm.sum(v.size)) for name, v in self.vectors.items()}
         if comm.rank == 0:
-            self.events.append(('adaptivity', dict(data=vector_sizes, **self.runtime())))
+            self.events.append(dict(event='adaptivity', data=vector_sizes, **self.runtime()))
             
     def step_event(self, t):
         if comm.rank == 0:
-            self.events.append(('step', dict(**self.runtime(), t=t)))
+            self.events.append(dict(event='step', **self.runtime(), t=t))
             
     def solve_event(self, kind):
         start = time.time()
         def done(info):
             end = time.time()
             if comm.rank == 0:
-                self.events.append(('solve', dict(kind=kind, **self.runtime(), solve_time=end-start, **info)))
+                self.events.append(dict(event='solve', kind=kind, **self.runtime(), solve_time=end-start, **info))
         return done
     
     def runtime(self):

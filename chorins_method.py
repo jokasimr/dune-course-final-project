@@ -98,7 +98,7 @@ def setup(domain, grid_type=aluConformGrid):
         #"newton.linear.tolerance": 1e-7,
         "newton.linear.tolerance.strategy": "eisenstatwalker",
         "newton.linear.errormeasure": "residualreduction",
-        "newton.linear.preconditioning.method": "ssor",
+        #"newton.linear.preconditioning.method": "ssor",
         #"newton.verbose": True,
         #"newton.linear.verbose": True,
     }
