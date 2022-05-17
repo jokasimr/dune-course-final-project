@@ -27,16 +27,15 @@ from ufl import TestFunction, TrialFunction, SpatialCoordinate,\
 
 
 def setup(domain, grid_type=aluConformGrid):
-    if comm.rank == 0:
-        view = adaptiveLeafGridView(grid_type(domain))
-    else:
-        view = adaptiveLeafGridView(grid_type({"vertices": [], "simplices": []}, dimgrid=2))
+    if comm.rank != 0:
+        domain = {"vertices": [], "simplices": []}
+    view = adaptiveLeafGridView(grid_type(domain, dimgrid=2, lbMethod=13))
 
     fem.loadBalance(view.hierarchicalGrid)
     dim = view.dimension
 
     # Spaces
-    storage = "numpy"
+    storage = "petsc"
     space_velocity = lagrange(view, order=2, dimRange=dim, storage=storage)
     x = SpatialCoordinate(space_velocity)
     n = FacetNormal(space_velocity)
@@ -95,12 +94,12 @@ def setup(domain, grid_type=aluConformGrid):
     # Solvers
     shared_solver_parameters = {
         "newton.tolerance": 1e-5,
-        #"newton.linear.tolerance": 1e-7,
-        "newton.linear.tolerance.strategy": "eisenstatwalker",
-        "newton.linear.errormeasure": "residualreduction",
+        "newton.linear.tolerance": 1e-7,
+        #"newton.linear.tolerance.strategy": "eisenstatwalker",
+        #"newton.linear.errormeasure": "residualreduction",
         #"newton.linear.preconditioning.method": "ssor",
-        #"newton.verbose": True,
-        #"newton.linear.verbose": True,
+        "newton.verbose": True,
+        "newton.linear.verbose": True,
     }
 
     tentative_velocity_problem = galerkin(

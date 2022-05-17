@@ -64,7 +64,7 @@ else:
     
 problem = setup(domain)
 view, x = next(problem)
-view.hierarchicalGrid.globalRefine(1)
+#view.hierarchicalGrid.globalRefine(1)
 
 # Define parameters
 μ = Constant(1e-3, name="mu")
@@ -126,6 +126,8 @@ info.step_event(t.value)
 while t.value < T:
     if t.value // savetime > (t.value - dt.value) // savetime:
         write_solution()
+        if comm.rank == 0:
+            print("JSON ", json.dumps(info.events[-1]))
         info.save()
         
     step(info)

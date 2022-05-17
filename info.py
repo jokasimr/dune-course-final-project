@@ -34,11 +34,14 @@ class RunInformationCollector:
         t = time.time() - self.start_time
         return dict(time=t, time_min=round(t/60, 2))
     
+    def export(self):
+        return dict(**self.data, events=self.events)
+
     def save(self):
         if comm.rank == 0:
             with open(self.filename, 'w') as f:
-                json.dump(dict(**self.data, events=self.events), f)
-        
+                json.dump(self.export(), f)
+ 
     @property
     def filename(self):
         return f'{self.data["name"]}_{self.data["id"]}.json'

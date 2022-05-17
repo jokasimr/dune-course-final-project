@@ -25,7 +25,7 @@ def setup(domain, grid_type=aluConformGrid):
     dim = view.dimension
 
     # Spaces
-    storage = "numpy"
+    storage = "petsc"
     space_velocity = lagrange(view, order=2, dimRange=dim, storage=storage)
     x = SpatialCoordinate(space_velocity)
     n = FacetNormal(space_velocity)
@@ -45,7 +45,6 @@ def setup(domain, grid_type=aluConformGrid):
     uk = space_velocity.interpolate([0]*dim, name="u_k")
     ukp1 = space_velocity.interpolate([0]*dim, name="u_kp1")
     
-    pkm1 = space_pressure.interpolate(0, name="p_km1")
     pk = space_pressure.interpolate(0, name="p_k")
     pkp1 = space_pressure.interpolate(0, name="p_kp1")
     
@@ -86,19 +85,17 @@ def setup(domain, grid_type=aluConformGrid):
     # Solvers
     shared_solver_parameters = {
         "newton.tolerance": 1e-5,
-        #"newton.linear.tolerance": 1e-7,
-        "newton.linear.tolerance.strategy": "eisenstatwalker",
-        "newton.linear.errormeasure": "residualreduction",
-        "newton.linear.preconditioning.method": "ssor",
-        #"newton.verbose": True,
-        #"newton.linear.verbose": True
+        "newton.linear.tolerance": 1e-7,
+        #"newton.linear.tolerance.strategy": "eisenstatwalker",
+        #"newton.linear.errormeasure": "residualreduction",
+        #"newton.linear.preconditioning.method": "ssor",
+        "newton.verbose": True,
+        "newton.linear.verbose": True
     }
 
-    linear_solver = "gmres"
-    
     velocity_problem = galerkin(
         [velocity_form, *u_bc],
-        solver=linear_solver,
+        solver="gmres",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -108,7 +105,7 @@ def setup(domain, grid_type=aluConformGrid):
     )
     projection_problem = galerkin(
         [projection_form, *p_bc],
-        solver=linear_solver,
+        solver="cg",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
@@ -117,7 +114,7 @@ def setup(domain, grid_type=aluConformGrid):
     )
     pressure_problem = galerkin(
         [pressure_correction_form, *p_bc],
-        solver=linear_solver,
+        solver="gmres",
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "sor",
@@ -140,8 +137,11 @@ def setup(domain, grid_type=aluConformGrid):
         uk.assign(ukp1)
         phikm1.assign(phik)
         phik.assign(phikp1)
-        pkm1.assign(pk)
         pk.assign(pkp1)
         t.value += dt.value
+
+    def adapt():
+        fem.adapt([ukm1, uk, pk, phikm1, phik])
+        fem.loadBalance([ukm1, uk, pk, phikm1, phik])
         
-    yield (ukm1, pkm1, uk, pk, step)
+    yield (ukm1, uk, pk, phik, step, adapt)
