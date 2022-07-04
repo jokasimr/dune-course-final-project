@@ -46,7 +46,7 @@ def setup(domain, grid_type=aluConformGrid):
     p = TrialFunction(space_pressure)
     q = TestFunction(space_pressure)
     
-    bc_velocity, bc_pressure, μ, ρ, t, dt, f = yield (view, x)
+    bc_velocity, bc_pressure, μ, ρ, t, dt, f, solver_arguments = yield (view, x)
     
     # Variational problems
     def tentative_velocity_form(u_old, p_old):
@@ -94,9 +94,9 @@ def setup(domain, grid_type=aluConformGrid):
     # Solvers
     shared_solver_parameters = {
         "newton.tolerance": 1e-5,
-        "newton.linear.tolerance": 1e-7,
-        #"newton.linear.tolerance.strategy": "eisenstatwalker",
-        #"newton.linear.errormeasure": "residualreduction",
+        #"newton.linear.tolerance": 1e-7,
+        "newton.linear.tolerance.strategy": "eisenstatwalker",
+        "newton.linear.errormeasure": "residualreduction",
         #"newton.linear.preconditioning.method": "ssor",
         #"newton.verbose": True,
         #"newton.linear.verbose": True,
@@ -109,7 +109,8 @@ def setup(domain, grid_type=aluConformGrid):
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
             #"newton.linear.preconditioning.method": "amg-ilu",
-            **shared_solver_parameters
+            **shared_solver_parameters,
+            **solver_arguments["tentative"],
         }
     )
     pressure_problem = galerkin(
@@ -118,7 +119,8 @@ def setup(domain, grid_type=aluConformGrid):
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
-            **shared_solver_parameters
+            **shared_solver_parameters,
+            **solver_arguments["pressure"],
         }
     )
     velocity_problem = galerkin(
@@ -127,7 +129,8 @@ def setup(domain, grid_type=aluConformGrid):
         parameters={
             # slower than without
             #"newton.linear.preconditioning.method": "sor",
-            **shared_solver_parameters
+            **shared_solver_parameters,
+            **solver_arguments["update"],
         }
     ) 
     
