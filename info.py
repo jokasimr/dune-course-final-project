@@ -9,8 +9,10 @@ class RunInformationCollector:
     def __init__(self, name, vectors, **information):
         self.vectors = vectors
         self.start_time = time.time()
+        vector_sizes = {name: dict(size=comm.sum(v.size)) for name, v in self.vectors.items()}
+
         if comm.rank == 0:
-            self.data = dict(name=name, id=str(uuid.uuid4())[:8], **information)
+            self.data = dict(name=name, id=str(uuid.uuid4())[:8], sizes=vector_sizes, **information)
             self.events = []
         
     def adaptivity_event(self):

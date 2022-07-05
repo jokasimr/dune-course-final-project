@@ -1,9 +1,44 @@
+import argparse
+from pprint import pprint
+
+parser = argparse.ArgumentParser(description='Run Karman Vortex experiment')
+parser.add_argument("--name", type=str, required=True)
+parser.add_argument("--level", type=int, default=0)
+parser.add_argument("--adaptive",  action='store_true')
+parser.add_argument("--adaptivitytol", type=int, nargs=2, default=(50, 20))
+parser.add_argument("--tentative", nargs="+", type=str, default=())
+parser.add_argument("--pressure", nargs="+", type=str, default=())
+parser.add_argument("--update", nargs="+", type=str, default=())
+parser.add_argument("--mu", type=float, default=1e-3)
+parser.add_argument("--dt", type=float, default=5e-5)
+args = parser.parse_args()
+
+def parse(v):
+    if all(s in '0123456789.' for s in v):
+        return float(v) if '.' in v else int(v)
+    return v
+
+def pairs(a):
+    ps = []
+    for i, x in enumerate(a):
+        if i % 2 == 0:
+            ps.append(x)
+        else:
+            ps.append(parse(x))
+            yield ps
+            ps = []
+
+solver_arguments = {
+    step: dict(list(pairs(getattr(args, step))))
+    for step in ["tentative", "pressure", "update"]
+}
+
 import json
 import numpy as np
 import time
 
 from dune.grid import cartesianDomain
-from dune.fem.function import integrate, uflFunction
+from dune.fem.function import integrate, uflFunction, gridFunction
 from dune.ufl import Constant
 from dune.common import comm
 from ufl import as_vector, sqrt, dot, curl, conditional, div
@@ -31,9 +66,9 @@ if found_pygmsh and comm.rank == 0:
         if d > 3 * r:
             if x < 0.7:
                 if 0.4 > x > 0.2:
-                    return 0.02
-                return 0.03
-            return 0.05
+                    return 0.025
+                return 0.04
+            return 0.06
         return abs(d - r)/2 + 1.5e-3
     
     with pygmsh.occ.Geometry() as geom:
@@ -64,17 +99,17 @@ else:
     
 problem = setup(domain)
 view, x = next(problem)
-#view.hierarchicalGrid.globalRefine(1)
+view.hierarchicalGrid.globalRefine(args.level)
 
 # Define parameters
-μ = Constant(1e-3, name="mu")
+μ = Constant(args.mu, name="mu")
 ρ = Constant(1, name="rho")
 f = Constant([0, 0], name="source")
 
-print("Reynolds number:", 6 * 0.2 * (H - 0.2) / H**2 * 2*r / μ.value)
+reynolds_number = 6 * 0.2 * (H - 0.2) / H**2 * 2*r / μ.value
 
 T = 5
-dt = Constant(5e-5, name="dt")
+dt = Constant(args.dt, name="dt")
 t = Constant(0, name="time")
 
 # Boundary conditions
@@ -90,7 +125,7 @@ bc_velocity = {top: [0, 0],
                left: [6 * x[1] * (H - x[1]) / H**2, 0]}
 bc_pressure = {right: 0}
 
-u, p, *funs, step = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f))
+u, p, *funs, step = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f, solver_arguments))
 
 # Initial condition
 u.interpolate([0, 0])
@@ -104,7 +139,12 @@ indicator = conditional(
     sqrt(curl(u)**2)
 )
 def adapt():
-    fem.markNeighbors(indicator, refineTolerance=50, coarsenTolerance=20, minLevel=0, maxLevel=3)
+    fem.markNeighbors(
+        indicator,
+        refineTolerance=args.adaptivitytol[0],
+        coarsenTolerance=args.adaptivitytol[1],
+        minLevel=0,
+        maxLevel=args.level)
     fem.adapt([u, p])
     fem.loadBalance([u, p, *funs])
     
@@ -124,22 +164,27 @@ write_solution = view.sequencedVTK(
     pointdata=[u, p],
     subsampling=2
 )
-use_adaptivity = False
-info = RunInformationCollector("vortex_street_chorin", dict(p=p, u=u))
+use_adaptivity = args.adaptive
+info = RunInformationCollector(
+        vectors=dict(p=p, u=u),
+        reynolds_number=reynolds_number,
+        solver_arguments=solver_arguments,
+        **vars(args)
+)
+if comm.rank == 0:
+    pprint(info.export())
 info.step_event(t.value)
 
 while t.value < T:
     if t.value // savetime > (t.value - dt.value) // savetime:
-        write_solution()
-        if comm.rank == 0:
-            print("JSON ", json.dumps(info.events[-1]))
         info.save()
-        
+        write_solution()
     step(info)
+    print("Time: ", t.value)
     info.step_event(t.value)
     if use_adaptivity:
         adapt()
         info.adaptivity_event()
 
-write_solution()
 info.save()
+write_solution()
