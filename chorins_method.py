@@ -98,8 +98,8 @@ def setup(domain, grid_type=aluConformGrid):
         #"newton.linear.tolerance.strategy": "eisenstatwalker",
         #"newton.linear.errormeasure": "residualreduction",
         #"newton.linear.preconditioning.method": "ssor",
-        "newton.verbose": True,
-        "newton.linear.verbose": True,
+        #"newton.verbose": True,
+        #"newton.linear.verbose": True,
     }
 
     tentative_velocity_problem = galerkin(
@@ -131,16 +131,16 @@ def setup(domain, grid_type=aluConformGrid):
         }
     ) 
     
-    def step(info_collection):
-        info_collection.solve_event("tentative_velocity")(
-            tentative_velocity_problem.solve(target=u_tentative)
-        )
-        info_collection.solve_event("pressure")(
-            pressure_problem.solve(target=p_new)
-        )
-        info_collection.solve_event("velocity")(
-            velocity_problem.solve(target=u_new)
-        )
+    def step(info_collection=None):
+        i = tentative_velocity_problem.solve(target=u_tentative)
+        if info_collection:
+            info_collection.solve_event("tentative_velocity")(i)
+        i = pressure_problem.solve(target=p_new)
+        if info_collection:
+            info_collection.solve_event("pressure")(i)
+        i = velocity_problem.solve(target=u_new)
+        if info_collection:
+            info_collection.solve_event("velocity")(i)
         #print_memory_usage("after solve")
         u_old.assign(u_new)
         p_old.assign(p_new)
