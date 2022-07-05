@@ -110,7 +110,7 @@ def setup(domain, grid_type=aluConformGrid):
             #"newton.linear.preconditioning.method": "jacobi",
             #"newton.linear.preconditioning.method": "amg-ilu",
             **shared_solver_parameters,
-            **solver_arguments["tentative"],
+            **solver_arguments.get("tentative", dict()),
         }
     )
     pressure_problem = galerkin(
@@ -120,7 +120,7 @@ def setup(domain, grid_type=aluConformGrid):
             # slower than without
             #"newton.linear.preconditioning.method": "jacobi",
             **shared_solver_parameters,
-            **solver_arguments["pressure"],
+            **solver_arguments.get("pressure", dict()),
         }
     )
     velocity_problem = galerkin(
@@ -130,7 +130,7 @@ def setup(domain, grid_type=aluConformGrid):
             # slower than without
             #"newton.linear.preconditioning.method": "sor",
             **shared_solver_parameters,
-            **solver_arguments["update"],
+            **solver_arguments.get("update", dict()),
         }
     ) 
     

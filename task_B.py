@@ -39,7 +39,7 @@ bottom = x[1] <= 0
 bc_velocity = {top: [0, 0], bottom: [0, 0]}
 bc_pressure = {left: 8, right: 0}
 
-u, p, step = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f))
+u, p, step = problem.send((bc_velocity, bc_pressure, μ, ρ, t, dt, f, dict()))
 
 # Initial conditions
 u.interpolate([0, 0])
